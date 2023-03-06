@@ -1,0 +1,95 @@
+---
+name: last images' parent image up to date
+
+env:
+  PARENT_IMAGE: registry.access.redhat.com/ubi9-minimal
+  IMAGE_NAME: quay.io/ibotty/varnish
+  LTS_TAG_NAME: 6.0lts
+
+on:
+  workflow_dispatch:
+  schedule:
+  - cron: '0 0 * * *' # daily
+
+jobs:
+  image_tags:
+    name: Image tags
+    runs-on: ubuntu-latest
+    outputs:
+      tags: ${{ steps.image_tags.outputs.tags }}
+    steps:
+    - name: get top 5 image tags (excluding latest)
+      id: image_tags
+      shell: bash
+      run: |
+        set -euo pipefail
+        get_image_tags() {
+          skopeo inspect "docker://$1" | jq -cr '.RepoTags[]'
+        }
+        image_tags="$(get_image_tags "${{ env.IMAGE_NAME }}" | grep -Ev '^latest$' | head -n 5 | xargs)"
+        echo "discovered image tags for ${{ env.IMAGE_NAME }}: $image_tags"
+        echo tags=\"$image_tags\" >> $GITHUB_OUTPUT
+
+  check_outdated:
+    name: check for outdated container images
+    needs: [image_tags]
+    if: ${{ needs.image_tags.outputs.tags != '' }}
+    outputs:
+      matrix: ${{ steps.check_outdated.outputs.matrix }}
+    runs-on: ubuntu-latest
+    steps:
+    - name: check outdated parent image
+      id: check_outdated
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        skopeo_inspect() {
+          cachefile="/tmp/skopeo/$1"
+          mkdir -p "$(dirname "$cachefile")"
+
+          [ -f "$cachefile" ] && cat "$cachefile" && return
+
+          skopeo inspect "docker://$1" | tee "$cachefile"
+        }
+
+        check_outdated() {
+          local image="$1"
+          local tag="${image/*:/}"
+          local own="$(skopeo_inspect "$image")"
+          local own_layers="$(echo "$own" | jq -c .Layers)"
+          local parent="$(echo "$own" | jq -cr .Labels.parent_image)"
+          local parent_layers="$(skopeo_inspect "$parent" | jq -c .Layers)"
+          local outdated="$(jq -cn "$own_layers - ($own_layers - $parent_layers) | .== []")"
+
+          if [ "$outdated" = "true" ]; then
+            jq -cn '{varnish_version: $t, tags: $t, parent_image: $p}' --arg t "$tag" --arg p "$parent"
+          fi
+        }
+
+        to_rebuild="$(
+          for tag in ${{ needs.image_tags.outputs.tags }}; do
+            check_outdated "${{ env.IMAGE_NAME }}:$tag"
+          done | jq -cs '{include: .}')"
+
+        # add latest tag to lts tag
+        to_rebuild="$(echo "$to_rebuild" |\
+          jq -c '(.include[] | select(.varnish_version == $v)).tags += $t' \
+            --arg v "${{ env.LTS_TAG_NAME }}" \
+            --arg t " latest" )"
+
+        echo "matrix to rebuild: $to_rebuild"
+
+        echo "matrix=$to_rebuild" >> "$GITHUB_OUTPUT"
+
+  rebuild:
+    name: Rebuilds if base image changed
+    needs: check_outdated
+    strategy:
+      matrix: ${{ fromJson(needs.check_outdated.outputs.matrix) }}
+    uses: ./.github/workflows/container-build.yml
+    with:
+      parent_image: ${{ matrix.parent_image }}
+      varnish_version: ${{ matrix.varnish_version }}
+      tags: ${{ matrix.tags }}
+    secrets: inherit

@@ -1,0 +1,17 @@
+---
+name: build container on push
+
+env:
+  IMAGE_NAME: quay.io/ibotty/varnish
+
+on:
+  workflow_dispatch:
+  push:
+
+jobs:
+  build:
+    name: Trigger build of new image
+    uses: ./.github/workflows/container-build.yml
+    with:
+      tags: latest 6.0lts
+    secrets: inherit
