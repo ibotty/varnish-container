@@ -7,6 +7,21 @@ env:
   ARCHS: amd64, arm64
 
 on:
+  workflow_dispatch:
+    inputs:
+      varnish_version:
+        description: 'Varnish version'
+        default: 6.0lts
+        type: string
+      parent_image:
+        description: 'Parent image in the Containerfile'
+        default: registry.access.redhat.com/ubi9
+        type: string
+      tags:
+        description: 'Tags to publish, space separated'
+        required: true
+        default: 'latest'
+        type: string
   workflow_call:
     inputs:
       varnish_version:
@@ -20,7 +35,7 @@ on:
       tags:
         description: 'Tags to publish, space separated'
         required: true
-        default: latest
+        default: 'latest'
         type: string
 
 jobs:
