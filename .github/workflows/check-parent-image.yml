@@ -68,15 +68,13 @@ jobs:
         }
 
         to_rebuild="$(
-          for tag in ${{ needs.image_tags.outputs.tags }}; do
+          for tag in "${tags[@]}"; do
             check_outdated "${{ env.IMAGE_NAME }}:$tag"
-          done | jq -cs '{include: .}')"
-
-        # add latest tag to lts tag
-        to_rebuild="$(echo "$to_rebuild" |\
-          jq -c '(.include[] | select(.varnish_version == $v)).tags += $t' \
-            --arg v "${{ env.LTS_TAG_NAME }}" \
-            --arg t " latest" )"
+          done \
+            | jq -cs '(.[] | select(.varnish_version == $v)).tags += $t' \
+                --arg v "${{ env.LTS_TAG_NAME }}" \
+                --arg t " latest" \
+            | jq -c '{include: .}')"
 
         echo "matrix to rebuild: $to_rebuild"
 
