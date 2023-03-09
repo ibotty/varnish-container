@@ -87,6 +87,7 @@ jobs:
     needs: check_outdated
     strategy:
       matrix: ${{ fromJson(needs.check_outdated.outputs.matrix) }}
+    if: ${{ needs.check_outdated.outputs.matrix != '{"include":[]}' }}
     uses: ./.github/workflows/container-build.yml
     with:
       parent_image: ${{ matrix.parent_image }}
