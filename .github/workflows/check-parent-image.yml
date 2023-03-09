@@ -8,8 +8,9 @@ env:
 
 on:
   workflow_dispatch:
-  schedule:
-  - cron: '0 0 * * *' # daily
+  # disable for now, because the detection does not work
+  # schedule:
+  # - cron: '0 0 * * *' # daily
 
 jobs:
   image_tags:
