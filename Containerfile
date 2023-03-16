@@ -21,7 +21,8 @@ LABEL io.k8s.description="Varnish" \
 
 ADD varnishcache_varnish-$VARNISH_VERSION.repo /etc/yum.repos.d
 
-RUN dnf install -y varnish-${VARNISH_VERSION/lts}* \
+RUN dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm \
+ && dnf install -y varnish-${VARNISH_VERSION/lts}* \
  && dnf clean all
 
 USER 993
